@@ -854,9 +854,10 @@ adding this content into the Menu.xml:
         </User>
     </menu>
 
-
-When you refresh your page now, you should notice the menu system
-automatically picks up this new information.
+The menu system is subject to caching, so you may not see your changes
+in the UI yet. Delete the ``/tmp/opnsense_menu_cache.xml`` file, if it
+exists. Now, when you refresh your page, you should notice the menu
+system automatically picks up the new information.
 
 |menu registration|
 
@@ -888,6 +889,11 @@ This creates an ACL key named “page-user-helloworld” which authorizes
 access to both the ui and API urls of this application. You can now
 grant access to this module from the system user manager.
 
+The ACL system is subject to caching, so you may not see your changes
+in the user manager page yet. Delete the
+``/tmp/opnsense_acl_cache.json`` file, if it exists. Now, when you
+refresh the user manager page, you should see that the new ACL is
+available to be assigned.
 
 ----------------------------
 Create an installable plugin
@@ -967,7 +973,7 @@ prefixed with os-, our new package file will be called:
 -  frontend template language reference (Volt) :
    https://docs.phalcon.io/latest/volt/
 -  configuration template language reference (mostly the same as Volt) :
-   http://jinja.pocoo.org/docs/dev/
+   https://jinja.palletsprojects.com/en/stable/
 -  OPNsense architecture :doc:`Architecture <../architecture>`
 -  OPNsense creating models
    `Develop:Frontend/Creating\_models </index.php/Develop:Frontend/Creating_models>`__

@@ -60,6 +60,12 @@ General Settings
 Most settings are pretty straightforward here when the service is enabled, it should just start forwarding dns requests
 when received from the network. DHCP requires at least one dhcp-range and matching dhcp-options.
 
+.. Tip::
+
+    - To disable the DNS feature, set the `Listen Port` to ``0``.
+    - To disable the DHCP feature, select interfaces in `Interface [no dhcp]`.
+
+
 .. tabs::
 
     .. tab:: General
@@ -90,9 +96,9 @@ when received from the network. DHCP requires at least one dhcp-range and matchi
         **Listen Port**                           The port used for responding to DNS queries. It should normally be left blank unless
                                                   another service needs to bind to TCP/UDP port 53. Setting this to zero (0) completely
                                                   disables DNS function.
-        **DNSSEC**
+        **DNSSEC**                                Enable DNSSEC.
         **No Hosts Lookup**                       Do not read hostnames in /etc/hosts.
-        **Log the results of DNS queries**
+        **Log the results of DNS queries**        Log all DNS queries.
         **Maximum concurrent queries**            Set the maximum number of concurrent DNS queries. On configurations with tight
                                                   resources, this value may need to be reduced.
         **Cache size**                            Set the size of the cache. Setting the cache size to zero disables caching. Please
@@ -116,8 +122,12 @@ when received from the network. DHCP requires at least one dhcp-range and matchi
         **Require domain**                        If this option is set, we will not forward A or AAAA queries for plain names, without
                                                   dots or domain parts, to upstream name servers. If the name is not known from /etc/hosts
                                                   or DHCP then a "not found" answer is returned.
-        **Do not forward private reverse**        If this option is set, we will not forward reverse DNS lookups (PTR) for private
-        **lookups**
+        **Do not forward to system defined DNS**  If this option is set, DNS forwarding to system nameservers (defined in System:
+                                                  General Setup: DNS Servers) will be disabled. Upstream servers defined in
+                                                  Services: Dnsmasq DNS & DHCP: Domains will still be used. This option is recommended
+                                                  when Unbound forwards local domain queries to Dnsmasq, so that all queries terminate
+                                                  without further lookups if they are unknown.
+        **Do not forward private reverse lookup** If this option is set, we will not forward reverse DNS lookups (PTR) for private
                                                   addresses (RFC 1918) to upstream name servers. Any entries in the Domain Overrides
                                                   section forwarding private "n.n.n.in-addr.arpa" names to a specific server are still
                                                   forwarded. If the IP to name is not known from /etc/hosts, DHCP or a specific domain
@@ -198,6 +208,8 @@ DNS Settings
         ========================================= ====================================================================================
         **Host**                                  Name of the host, without the domain part. Use "*" to create a wildcard entry.
         **Domain**                                Domain of the host, e.g. example.com
+        **Local**                                 Set the above domain as local. This will configure this DNS server as authoritative;
+                                                  it will not forward queries to any upstream servers for this domain.
         **IP addresses**                          IP addresses of the host, e.g. 192.168.100.100 or fd00:abcd::1. Can be multiple IPv4
                                                   and IPv6 addresses for dual stack configurations. Setting multiple addresses will automatically
                                                   assign the best match based on the subnet of the interface receiving the DHCP Discover.
@@ -207,7 +219,8 @@ DNS Settings
         **Hardware addresses**                    Match the hardware address of the client. Can be multiple addresses, e.g., if the client has
                                                   multiple network cards. Though keep in mind that Dnsmasq cannot assume which address is the correct
                                                   one when multiple send DHCP Discover at the same time.
-        **Lease time**                            Defines how long the addresses (leases) given out by the server are valid (in seconds)
+        **Lease time**                            Defines how long the addresses (leases) given out by the server are valid (in seconds).
+                                                  Set ``0`` for infinite.
         **Tag [set]**                             Optional tag to set for requests matching this range which can be used to selectively match DHCP options.
         **Ignore**                                Ignore any DHCP packets of this host. Useful if it should get served by a different DHCP server.
         **Description**                           You may enter a description here for your reference (not parsed).
@@ -229,6 +242,11 @@ DNS Settings
         **IP address**                            IP address of the authoritative DNS server for this domain, leave empty to prevent lookups for this domain.
         **Port**                                  Specify a non-standard port number here, leave blank for default.
         **Source IP**                             Source IP address for queries to the DNS server for the override domain. Best to leave empty.
+        **Firewall Alias**                        Choose an "external (advanced)" type alias from "Firewall - Aliases". Whenever a client successfully resolves
+                                                  the domain, the resolved IP addresses will be automatically added to the chosen alias. Adding a domain will
+                                                  also add all IP addresses of resolved subdomains. Please note that DNS record TTL is not evaluated;
+                                                  once an IP address is added, it will stay permanently, or until manually flushed in "Firewall - Diagnostics - Aliases",
+                                                  or until removed automatically when setting an expiration on the alias.
         **Description**                           You may enter a description here for your reference (not parsed).
         ========================================= ====================================================================================
 
@@ -273,10 +291,39 @@ DHCP Settings
                                                   Going lower than that can pose issues in busy networks.
         **Mode**                                  Mode flags to set for this range, 'static' means no addresses will be automatically assigned.
         **Lease time**                            Defines how long the addresses (leases) given out by the server are valid (in seconds).
+                                                  Set ``0`` for infinite; be careful as this might deplete the pool.
+        **Domain Type**                           Choose if the domain will only match clients in this range, or all clients in any subnets on the selected interface.
+                                                  If you create both IPv4 and IPv6 ranges, setting this to "Interface" on both ranges is recommended.
         **Domain**                                Offer the specified domain to machines in this range.
         **Disable HA sync**                       Ignore this range from being transferred or updated by HA sync.
         **Description**                           You may enter a description here for your reference (not parsed).
         ========================================= ====================================================================================
+
+
+    .. tab:: RA Modes
+
+        ================  ==========  ==========  ==========  ====================  ================  ==========
+        **Modes**         **M-Bit**   **O-Bit**   **A-Bit**   **Default Route**     **DHCPv6**        **SLAAC**
+        ================  ==========  ==========  ==========  ====================  ================  ==========
+        **default**       1           0           0           advertised            stateful          no
+        **ra-only**       0           0           0           advertised            no                no
+        **slaac**         1           0           1           advertised            stateful          yes
+        **ra-stateless**  0           1           1           advertised            stateless         yes
+        ================  ==========  ==========  ==========  ====================  ================  ==========
+
+        This is what the RA Flags (Bits) mean:
+
+        - ``M`` - Managed address configuration:
+            The client should use stateful DHCPv6 to obtain an IPv6 address.
+        - ``O`` - Other configuration:
+            The client should use stateless DHCPv6 to obtain additional information (e.g., DNS server).
+        - ``A`` - Autonomous address-configuration:
+            The client can use SLAAC to self-assign an IPv6 address based on the advertised prefix.
+
+        .. Tip::
+
+            For other RA modes not listed here, visit the `dnsmasq man page <https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html>`_.
+
 
     .. tab:: DHCP options
 
@@ -293,10 +340,25 @@ DHCP Settings
                                                   The special address 0.0.0.0 or [::] is taken to mean "the address of the machine running dnsmasq".
                                                   When using "Match", leave empty to match on the option only.
         **Tag [set]**                             Tag to set for requests matching this range which can be used to selectively match dhcp options.
+        **Value**                                 Value (or values) to send to the client. The special address 0.0.0.0 or [::] is taken to mean "the address of the machine running dnsmasq".
+                                                  When using "Match", leave empty to match on the option only.
+                                                  Send multiple values as a comma-separated list. E.g., ``192.168.1.1,192.168.1.2``.
         **Force**                                 Always send the option, even when the client does not ask for it in the parameter request list.
         **Description**                           You may enter a description here for your reference (not parsed).
         ========================================= ====================================================================================
 
+    .. tab:: DHCP boot
+
+        ========================================= ====================================================================================
+        **Option**                                **Description**
+        ========================================= ====================================================================================
+        **Interface**                             This adds a single interface as tag so this DHCP boot option can match the interface of a DHCP range.
+        **Tag**                                   Only offer this boot image to the clients matched by the given tag. Can be optionally combined with an interface tag.
+        **Filename**                              The boot image file name.
+        **Servername**                            The name of the server which serves the boot image.
+        **Server address**                        The address of the server which serves the boot image.
+        **Description**                           You may enter a description here for your reference (not parsed).
+        ========================================= ====================================================================================
 
     .. tab:: DHCP tags
 
@@ -362,11 +424,13 @@ Option                              Value
 **Listen Port**                     ``53``
 ==================================  =======================================================================================================
 
-- Press **Apply**
+- | Press **Apply**
+- | Go to :menuselection:`Services --> Unbound DNS --> Query Forwarding` and create an entry for each DHCP range you plan to configure.
 
-- Go to :menuselection:`Services --> Unbound DNS --> Query Forwarding` and create an entry for each DHCP range you plan to configure.
+In our example, we configure query forwarding for 2 networks:
 
-In our example, we use 2 DHCP ranges, so we will configure ``lan.internal`` and ``guest.internal``.
+    - ``lan.internal`` - ``192.168.1.0/24``
+    - ``guest.internal`` - ``192.168.10.0/24``
 
 .. tabs::
 
@@ -382,12 +446,37 @@ In our example, we use 2 DHCP ranges, so we will configure ``lan.internal`` and 
 
         - Press **Save** and add next
 
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Domain**                          ``1.168.192.in-addr.arpa``
+        **Server IP**                       ``127.0.0.1``
+        **Server Port**                     ``53053``
+        ==================================  =======================================================================================================
+
+        - Press **Save** and **Apply**
+
+        .. Note:: The first entry is for the forward lookup (A-Record), the second for the reverse lookup (PTR-Record).
+
+        .. Tip:: If all PTR records for 192.168.0.0/16 should be handled by Dnsmasq, creating a single entry with ``168.192.in-addr.arpa`` is enough.
+
+
     .. tab:: guest.internal
 
         ==================================  =======================================================================================================
         Option                              Value
         ==================================  =======================================================================================================
         **Domain**                          ``guest.internal``
+        **Server IP**                       ``127.0.0.1``
+        **Server Port**                     ``53053``
+        ==================================  =======================================================================================================
+
+        - Press **Save** and add next
+
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Domain**                          ``10.168.192.in-addr.arpa``
         **Server IP**                       ``127.0.0.1``
         **Server Port**                     ``53053``
         ==================================  =======================================================================================================
@@ -400,25 +489,31 @@ In our example, we use 2 DHCP ranges, so we will configure ``lan.internal`` and 
     thats not used on the internet, e.g., ``lan.internal.example.com``.
 
 
-Now that we have the DNS infrastructure set up, we can configure the DHCP ranges and DHCP options.
+Now that we have the DNS infrastructure set up, we can configure DHCP.
 
 - Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> General` and set:
 
-==================================  =======================================================================================================
-Option                              Value
-==================================  =======================================================================================================
-**Interface**                       ``LAN, GUEST`` (The network interfaces which will serve DHCP, this registers firewall rules)
-**DHCP fqdn**                       ``X``
-**DHCP default domain**             ``internal`` (or leave empty to use this system's domain)
-**DHCP register firewall rules**    ``X``
-==================================  =======================================================================================================
-
-- Press **Apply**
+================================================ =======================================================================================================
+Option                                           Value
+================================================ =======================================================================================================
+**Interface**                                    ``LAN, GUEST`` (The network interfaces which will serve DHCP, this registers firewall rules)
+**Do not forward to system defined DNS servers** ``X`` (Unless Domains are specified in Dnsmasq: Domains, this will disable forwarding behavior)
+**DHCP fqdn**                                    ``X``
+**DHCP default domain**                          ``internal`` (or leave empty to use this system's domain)
+**DHCP register firewall rules**                 ``X``
+================================================ =======================================================================================================
 
 .. Note::
 
-    Ignore the ISC / KEA DHCP (legacy) options as our setup does not require them. We use the Dnsmasq built in DHCP/DNS register functionality
-    with Unbound DNS query forwarding.
+    **DHCP fqdn** will do two things:
+
+    - Make sure all devices are registered in DNS with the configured domain name appended, e.g. ``smartphone.lan.internal``.
+      This ensures that ``smartphone`` can exist in both ``lan.internal`` and ``guest.internal``.
+    - Register the DHCP domain name as local, which will make Dnsmasq authoritative for this domain, ensuring ``NXDOMAIN`` is returned
+      for devices querying unknown hostnames within this local domain.
+
+- Press **Apply**
+
 
 As next step we define the DHCP ranges for our interfaces.
 
@@ -437,13 +532,18 @@ As next step we define the DHCP ranges for our interfaces.
         **Domain**                          ``lan.internal``
         ==================================  =======================================================================================================
 
-        - Press **Save** and add next
+        - Press **Save** and **Apply**
 
         .. Note::
 
             If a host receives a DHCP lease from this range, and it advertises a hostname, it will be registered under the chosen domain name.
-            E.g., a host named ``nas01`` will become ``nas01.lan.internal``. This is the FQDN a client can query to receive the current
-            IP address.
+            E.g., a host named ``nas01`` will become ``nas01.lan.internal``. A client can query this FQDN to receive the current IP address.
+
+        .. Attention::
+
+            If you plan to use partial IPv6 addresses in ranges with a constructor, enable the advanced mode and set **Domain Type** to ``Interface``.
+            This will register any subnets on the chosen interface to the selected domain. This is the only way dynamic DNS registration succeeds
+            when the IPv6 prefix is dynamic.
 
     .. tab:: GUEST
 
@@ -458,94 +558,29 @@ As next step we define the DHCP ranges for our interfaces.
 
         - Press **Save** and **Apply**
 
-The final step is to set DHCP options for the ranges, at least router[3] and dns-server[6] should be announced.
 
-- Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> DHCP options` and set:
+.. Tip::
 
-.. tabs::
+    Creating a DHCP range will automatically send out common DHCP options to requesting clients, without explicitely configuring them.
 
-    .. tab:: LAN
+This is an incomplete overview which highlights some default DHCP options:
 
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          router[3]
-        **Interface**                       ``LAN``
-        **Value**                           ``192.168.1.1`` (the interface IP address of LAN, or a virtual IP of LAN)
-        ==================================  =======================================================================================================
+==================================================  ======================================================  ===================================================
+DHCP Option                                         Default                                                 Description
+==================================================  ======================================================  ===================================================
+router[3]                                           IPv4 address of the interface that received the         The default gateway the client should use.
+                                                    DHCP Request.                                           In this case the OPNsense.
+dns-server[6]                                       IPv4 address of the interface that received the         The DNS server the client should use.
+                                                    DHCP Request.                                           In this case Unbound on the OPNsense.
+domain-name[15]                                     Domain set in a DHCP Range, or the default              The domain name the client should use,
+                                                    system domain if none could be matched.                 to construct short names to FQDNs in DNS lookups
+client fqdn[81]                                     A combination of client hostname and domain, the        The full qualified domain name the client should
+                                                    result of the DDNS registration.                        use.
+==================================================  ======================================================  ===================================================
 
-        - Press **Save** and add next
+.. Note::
 
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          dns-server[6]
-        **Interface**                       ``LAN``
-        **Value**                           ``192.168.1.1`` (Unbound listens the interface IP address of LAN, or a virtual IP of LAN)
-        ==================================  =======================================================================================================
-
-        - Press **Save** and add next
-
-        .. Note::
-
-            Instead of setting the interface IP address as value, the special address 0.0.0.0 can be used to implicitely set it as `the server Dnsmasq
-            is running on`. Though in some scenarios that is not possible, e.g., when using a virtual IP addresses. So for consistency, this guide suggests
-            setting each IP address explicitely to avoid confusion.
-
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          domain-search [119]
-        **Interface**                       ``LAN``
-        **Value**                           ``lan.internal``
-        ==================================  =======================================================================================================
-
-        .. Tip::
-
-            Using a FQDN (Full Qualified Domain Name) is required for this setup to work (e.g., ``smartphone.lan.internal``)
-            If you want to resolve short names inside a DHCP range (e.g., ``smartphone`` without ``.lan.internal``), add the
-            ``domain-search [119]`` DHCP option to all ranges.
-
-        - Press **Save** and add next
-
-    .. tab:: Guest
-
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          router[3]
-        **Interface**                       ``GUEST``
-        **Value**                           ``192.168.10.1`` (the interface IP address of GUEST, or a virtual IP of GUEST)
-        ==================================  =======================================================================================================
-
-        - Press **Save** and add next
-
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          dns-server[6]
-        **Interface**                       ``GUEST``
-        **Value**                           ``192.168.10.1`` (Unbound listens the interface IP address of GUEST, or a virtual IP of GUEST)
-        ==================================  =======================================================================================================
-
-        - Press **Save** and add next
-
-        ==================================  =======================================================================================================
-        Option                              Value
-        ==================================  =======================================================================================================
-        **Type**                            Set
-        **Option**                          domain-search [119]
-        **Interface**                       ``GUEST``
-        **Value**                           ``guest.internal``
-        ==================================  =======================================================================================================
-
-        - Press **Save** and **Apply**
-
+    Only some usecases require setting these options manually, e.g., the IPv4 address of the router and dns-server in high availability setups with CARP.
 
 .. Attention::
 
@@ -566,11 +601,17 @@ Our smartphone now has the following IP configuration:
 - DNS Server: ``192.168.1.1``
 
 At the same time, Dnsmasq registers the DNS hostname of the smartphone (if it exists). Since we configured the FQDN option and domain in the DHCP range, the name of the
-smartphone will be: ``smartphone.lan.internal``.
+smartphone will be: ``smartphone.lan.internal.``.
 
-When a client queries `Unbound` for exactly ``smartphone.lan.internal``, the configured query forwarding sends the request to the DNS server responsible for ``lan.internal``
-which is our configured `Dnsmasq` listening on ``127.0.0.1:53053``. ``Dnsmasq`` responds to this query and will resolve the current A-Record of ``smartphone.lan.internal`` to
+When a client queries `Unbound` for exactly ``smartphone.lan.internal.``, the configured query forwarding sends the request to the DNS server responsible for ``lan.internal.``
+which is our configured `Dnsmasq` listening on ``127.0.0.1:53053``. ``Dnsmasq`` responds to this query and will resolve the current A record of ``smartphone.lan.internal.`` to
 ``192.168.1.100``, sending this information to `Unbound` which in return sends the response back to the client that initially queried.
+
+.. Tip::
+
+    You can usually resolve a hostname in your network by querying for e.g. ``smartphone``. This works because client systems
+    recognize that a FQDN is not used, and will therefore suffix the request with their domain name received from Dnsmasq, transforming
+    the query to ``smartphone.lan.internal.``.
 
 As you can see, this is a highly integrated and simple setup which leverages just the available DHCP and DNS standards with no trickery involved.
 
@@ -578,7 +619,7 @@ As you can see, this is a highly integrated and simple setup which leverages jus
 DHCPv6 and Router Advertisements
 ------------------------------------------------------
 
-DHCPv6 can run at the same time as DHCPv4. Essentially, create another range for DHCPv6 for the same interface as the DHCPv6 variant.
+DHCPv6 can run at the same time as DHCPv4, just specify another range.
 
 .. Attention::
 
@@ -609,6 +650,12 @@ Option                              Value
     Set ``ra-names`` in addition to ``ra-stateless`` if DNS names should be registered automatically for SLAAC addresses. Please note that this
     does not work for clients using the IPv6 privacy extensions.
 
+.. Attention::
+
+    If you plan to use partial IPv6 addresses in ranges with a constructor, enable the advanced mode and set **Domain Type** to ``Interface``.
+    This will register any subnets on the chosen interface to the selected domain. This is the only way dynamic DNS registration succeeds
+    when the IPv6 prefix is dynamic.
+
 .. Note::
 
     If do not want to use Router Advertisements, leave the RA Mode on default, and do not enable the Router Advertisement global setting. Ensure
@@ -627,6 +674,11 @@ Option                              Value
 **Interface**                       ``LAN``
 **Value**                           ``[::]``
 ==================================  =======================================================================================================
+
+.. Tip::
+
+    To use the same ``dns-server [23]`` option on all interfaces, set the interface to any. You do not need to create them for each
+    interface individually. The correct IPv6 DNS server will be automatically calculated via ``[::]`` anyway.
 
 .. Note::
 
@@ -653,6 +705,20 @@ For an IPv6 reservation, a DHCPv6 range must be configured which sets ``slaac`` 
 This sets the `A bit` so that clients can generate a SLAAC address and receive an additional DHCPv6 lease.
 If a different Router Advertisement daemon is used, ensure it runs in `Assisted` mode.
 
+.. Tip::
+
+    Reservations will reserve the IP address inside a range, meaning the reserved IP will not be offered to dynamic clients.
+
+    A dynamic range like ``192.168.1.100-192.168.1.199`` and a reservation like ``192.168.1.101`` are valid and there will be no collisions.
+
+    The reservation can also be outside the dynamic range, but it is not recommended for simple setups as the dynamic dns registration
+    with dhcp-fqdn will not work correctly.
+
+.. Attention::
+
+    Setting the range mode to static is not required for reservations. It is for specific usecases where a range should not serve any
+    unknown dynamic clients.
+
 .. Note::
 
     As all clients configure a tag with the receiving interface name automatically,
@@ -670,16 +736,19 @@ Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> Hosts`
         Option                              Value
         ==================================  =======================================================================================================
         **Host**                            ``smartphone``
-        **IP addresses**                    ``192.168.1.150`` ``192.168.10.150``
+        **IP addresses**                    ``192.168.1.150``
         **Hardware addresses**              ``aa:bb:cc:dd:ee:ff``
         ==================================  =======================================================================================================
 
         - Press **Save** and **Apply**
 
-        .. Tip::
+        .. Attention::
 
-            Setting IP addresses for different DHCP ranges will ensure that when the client traverses between e.g., ``LAN`` and ``GUEST`` that it receives a static IP address in
-            both ranges automatically.
+            Setting a domain in the reservation has no effect on the dynamic dns registration; it will only create a static host override.
+
+            Dnsmasq will always combine the host with a domain configured in a matching dhcp range.
+
+            This is especially important for partial IPv6 reservations, as they cannot be resolved before the dynamic dns registration has finished.
 
     .. tab:: IPv6
 
@@ -708,7 +777,7 @@ Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> Hosts`
         Option                              Value
         ==================================  =======================================================================================================
         **Host**                            ``smartphone``
-        **IP addresses**                    ``192.168.1.150`` ``192.168.10.150`` ``::1234``
+        **IP addresses**                    ``192.168.1.150`` ``::1234``
         **Client identifier**               ``00:03:00:01:aa:bb:cc:dd:ee:ff``
         **Hardware addresses**              ``aa:bb:cc:dd:ee:ff``
         ==================================  =======================================================================================================
@@ -771,6 +840,95 @@ Option                              Value
 
 This ensures that only clients identifying as VoIP phones receive the appropriate TFTP server information via option 150. You can add
 additional options under the same tag if they should be offered to the VOIP phones.
+
+DHCP boot
+------------------------------------------
+
+In a network, we have different clients that should receive different boot images depending on if they require a BIOS or EFI boot.
+
+By using DHCP tags, we can configure this behavior by matching DHCP options and combining them with a DHCP boot directive.
+
+Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> DHCP tags` and create two tags:
+
+.. tabs::
+
+    .. tab:: BIOS Tag
+
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Name**                            ``IsBIOS``
+        ==================================  =======================================================================================================
+
+    .. tab:: EFI Tag
+
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Name**                            ``IsEFI``
+        ==================================  =======================================================================================================
+
+Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> DHCP options`
+
+We will match the DHCP option ``client-arch[93]`` which has multiple possibilities when it comes to the client architecture.
+Value ``0`` matches `x86 BIOS` and value ``7`` matches `EFI BC (EFI x64)`. Choose the correct values to match your specific clients.
+
+.. tabs::
+
+    .. tab:: BIOS Match Tag
+
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Type**                            Match
+        **Option**                          ``client-arch[93]``
+        **Tag [set]**                       ``IsBIOS``
+        **Value**                           0
+        ==================================  =======================================================================================================
+
+    .. tab:: EFI Match Tag
+
+        ==================================  =======================================================================================================
+        Option                              Value
+        ==================================  =======================================================================================================
+        **Type**                            Match
+        **Option**                          ``client-arch[93]``
+        **Tag [set]**                       ``IsEFI``
+        **Value**                           7
+        ==================================  =======================================================================================================
+
+Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> DHCP options --> DHCP boot`
+
+Create two boot entries that serve the correct image to matching clients. We assume the requests are on LAN, though it can be left empty
+if these boot images should be served on any interfaces. Adjust IP addresses and filenames to fit your environment.
+
+.. tabs::
+
+    .. tab:: BIOS Boot
+
+        ========================================= ====================================================================================
+        **Option**                                **Description**
+        ========================================= ====================================================================================
+        **Interface**                             ``LAN``
+        **Tag**                                   ``IsBIOS``
+        **Filename**                              ``undionly.kpxe``
+        **Servername**                            ``192.168.99.10``
+        **Server address**                        ``192.168.99.10``
+        ========================================= ====================================================================================
+
+    .. tab:: EFI Boot
+
+        ========================================= ====================================================================================
+        **Option**                                **Description**
+        ========================================= ====================================================================================
+        **Interface**                             ``LAN``
+        **Tag**                                   ``IsEFI``
+        **Filename**                              ``snponly.efi``
+        **Servername**                            ``192.168.99.10``
+        **Server address**                        ``192.168.99.10``
+        ========================================= ====================================================================================
+
+**Apply** the new configuration, and check the PXE boot server if clients request the correct boot image files.
 
 
 DHCPv4 for small HA setups
@@ -910,3 +1068,107 @@ As soon as the master comes back online, the higher RA priority will make client
 
     Do not set the RA Interval and RA Router Lifetime too low, as clients could potentially loose their default routes in busy networks.
     The bare minimum for RA Router Lifetime should be (RA Interval*3).
+
+
+Dnsmasq as primary DNS resolver
+--------------------------------------------------
+
+This is a small complementory section how to configure Dnsmasq as the primary DNS resolver for your network combined with Unbound as recurser.
+
+It is useful if you rely on features like dynamic IPv6 networks with PTR records registered via DHCP, or the Firewall Alias (IPset) feature.
+
+The drawbacks are Unbound Statistics or Blocklist features based on client IP, as the client will always be 127.0.0.1.
+
+The benefits are a less complicated configuration and less adjustments in Unbound if new networks get introduced.
+
+- Go to :menuselection:`Services --> Unbound DNS --> General` and set:
+
+==================================  =======================================================================================================
+Option                              Value
+==================================  =======================================================================================================
+**Enable**                          ``X``
+**Listen Port**                     ``53053``
+==================================  =======================================================================================================
+
+- Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> General` and set:
+
+================================================ =======================================================================================================
+Option                                           Value
+================================================ =======================================================================================================
+**Enable**                                       ``X``
+**Listen Port**                                  ``53``
+**Do not forward to system defined DNS servers** ``X``  (This will force Dnsmasq to only use forwarding specified in the domains tab)
+**Do not forward private reverse lookups**       ``X``
+================================================ =======================================================================================================
+
+- Go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> Domains` and set:
+
+================================================ =======================================================================================================
+Option                                           Value
+================================================ =======================================================================================================
+**Sequence**                                     ``1``
+**Domain**                                       ``*``  (This will match all domains)
+**IP address**                                   ``127.0.0.1``  (Unbound listens on this IP address and port)
+**Port**                                         ``53053``
+================================================ =======================================================================================================
+
+Apply the configuration and test DNS resolution with a client.
+
+
+Firewall Alias (IPset)
+--------------------------------------------------
+
+Dnsmasq has a powerful feature, it can add resolved IP addresses to firewall aliases.
+
+This is quite useful in restricted networks or to gather statistics.
+
+As example, you provide a guest network, but users should only access ``example.com``. With a normal firewall alias, this might be challenging,
+as the domain might use multiple subdomains that serve additional content. It could also use a CDN to load balance content across different servers with dynamically
+changing IP addresses per client.
+
+With a Dnsmasq managed alias, this becomes rather simple as it will automatically add new IPv4 and IPv6 addresses as soon as they are requested by clients.
+
+A requirement to use this feature is that Dnsmasq is your primary DNS server for all clients, and access to any other DNS servers is blocked. A different approach is to
+do query forwarding from Unbound to Dnsmasq for the domains that should be added to its managed firewall aliases, with the caveat that Dnsmasq then must use
+an external resolver to prevent a query loop.
+
+.. Note::
+
+    This feature is more useful for allowlists, rather than blocklists. As IPv4 and IPv6 addresses are added to the managed firewall alias, using it as blocklist could
+    unintentionally kill access to shared hosting services. Also, if a browser is configured to use DoH (DNS over HTTPS) on port 443, a blocklist could be circumvented as Dnsmasq
+    would not respond to DNS requests - the alias would not be populated.
+
+.. Attention::
+
+    Try to be selective with the domain you add to the alias. Adding a TLD (Top Level Domain) like ``com`` could inflate the alias to the point it could become unusable.
+    A good rule of thumb is one alias per service domain, they can later be nested under a parent alias.
+
+In the following example, Dnsmasq is our primary DNS resolver, and it forwards queries to ``127.0.0.1:53053`` on which Unbound listens.
+
+- Go to :menuselection:`Firewall --> Aliases`:
+
+==================================  =======================================================================================================
+Option                              Value
+==================================  =======================================================================================================
+**Name**                            ``dnsmasq_example_com``
+**Type**                            ``External (advanced)``
+**Expire**                          ``86400``  (Gradually prunes unused IP addresses from the alias)
+==================================  =======================================================================================================
+
+After creating the alias, go to :menuselection:`Services --> Dnsmasq DNS & DHCP --> Domains`:
+
+==================================  =======================================================================================================
+Option                              Value
+==================================  =======================================================================================================
+**Domain**                          ``example.com``  (This also includes all subdomains under example.com)
+**IP Address**                      ``127.0.0.1``  (Or an external resolver like 1.1.1.1 if query forwarding for this domain from Unbound is configured)
+**Port**                            ``53053``  (Leave empty if the resolver listens on port 53)
+**Firewall Alias**                  ``dnsmasq_example_com``
+==================================  =======================================================================================================
+
+As final step, create a firewall rule with the ``dnsmasq_example_com`` alias as destination.
+
+.. Tip::
+
+    Verify the contents of the alias in :menuselection:`Firewall --> Diagnostics --> Aliases`:
+    It should populate with IP addresses as soon as clients resolve ``example.com`` via Dnsmasq.

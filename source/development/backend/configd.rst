@@ -82,6 +82,9 @@ Action properties
 +-----------------------+------------------------+--------------------------------------------------------+
 | errors                | text [no]              | :code:`errors:no` ignores the scripts exit code        |
 +-----------------------+------------------------+--------------------------------------------------------+
+| allowed_groups	| text			 | list of groups allowed to execute                      |
+|                       |                        | this action (e.g. wheel)                               |
++-----------------------+------------------------+--------------------------------------------------------+
 | message               | text                   | Message to send to syslog (you can use %s parameters)  |
 +-----------------------+------------------------+--------------------------------------------------------+
 | description           | text                   | User-friendly description, also allows GUI usage       |
@@ -122,6 +125,7 @@ For example, to add a proxy server (for the firmware updater), use settings like
     [environment]
     HTTP_PROXY=http://proxy-adddress:8080
     HTTPS_PROXY=http://proxy-adddress:8080
+    NO_PROXY=192.168.1.2
 
 
 
@@ -134,4 +138,9 @@ For example, to add a proxy server (for the firmware updater), use settings like
     When using the same settings as already specified in the base configuration, these settings will be overwritten. The parsing order
     of configuration files is to read all vendor shipped properties first and read additional files next. Last property found is the one
     being used (e.g. specifying a new :code:`PATH` in the environment, will overwrite the one being shipped in our :code:`configd.conf`.)
+
+.. Note::
+
+   The :code:`NO_PROXY` setting may be used to exclude hosts from using a proxy, which is usually practical for xmlrpc sync
+
 

@@ -61,8 +61,9 @@ button in the user interface) is responsible for initialising the empty local re
 
 .. Note::
 
-    One can always change the upstream target, as long as the newly configured one is either "bare" (empty) or containing the
-    exact same content (/change history) as the one used on this firewall.
+    One can always change the upstream target, as long as the newly configured one is either empty (has absolutely no history
+    - otherwise said, be a new one, absolutely untouched), or has the exact same history (otherwise said, be an exact copy, git
+    history included) as the one used on this firewall.
 
 --------------------------
 Initial setup
@@ -80,12 +81,12 @@ URL                                   Target location, which defined transport p
 Branch                                The branch to push your commits to on the configured url
 SSH private key                       When using ssh, make sure to add a private key here
 User Name                             Username, when using gitlab and ssh, the default is :code:`git` here
-                                      (most of these providers use a single user and identify the user by it's key)
+                                      (most of these providers use a single user and identify the user by its key)
 password                              When using https authentication, choose a password here.
 ====================================  ===============================================================================
 
-Make sure to push to a "bare" upstream repository, when pressing "Setup/Test Git" the initial commits should be send to
-your git server.
+Make sure to push to an empty (as in, new and never used) upstream repository, when pressing "Setup/Test Git" the initial
+commits should be sent to your git server.
 
 --------------------------
 SSH Setup
